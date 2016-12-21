@@ -1,9 +1,9 @@
 {
-  "motd": " ==== Telemetry Server. Accepting Submissions since 2013. ====",
+  "motd": " ==== Ready ====",
   "max_data_length": 204800,
   "max_path_length": 10240,
-  "port": 8080,
-  "log_path": "/mnt/telemetry/data",
+  "port": 8088,
+  "log_path": "/ebs/telemetry/data",
   "max_log_age_ms": 300000,
   "max_log_size": 524288000,
   "include_request_ip": true,
