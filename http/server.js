@@ -6,6 +6,7 @@ var http = require('http');
 var fs = require('fs');
 var os = require('os');
 var url = require('url');
+var path = require('path');
 
 var log_version = "v1";
 var config = {};
@@ -32,11 +33,13 @@ var max_ip_length = check_max(config.max_ip_length || 100, 1, "max_ip_length");
 // NOTE: This is for logging actual telemetry submissions
 var log_path = config.log_path || "./";
 var log_base = config.log_base || "telemetry.log";
+var mini_installer_log_path = config.mini_installer_log_path || "/ebs/telemetry/mini_installer";
 
 // TODO: URL Validation to ensure we're receiving dimensions
 // ^/submit/telemetry/id/reason/appName/appVersion/appUpdateChannel/appBuildID$
 // See http://mxr.mozilla.org/mozilla-central/source/toolkit/components/telemetry/TelemetrySend.jsm#527
 var url_prefix = config.url_prefix || "/submit/telemetry/";
+var mini_installer_url_prefix = config.mini_installer_url_prefix || "/submit/mini-installer/";
 var url_prefix_len = url_prefix.length;
 var include_ip = false;
 if (config.include_request_ip) {
@@ -45,9 +48,11 @@ if (config.include_request_ip) {
 }
 
 var max_log_size = config.max_log_size || 500 * 1024 * 1024;
+var max_mini_installer_log_size = config.max_mini_installer_log_size || 500 * 1024 * 1024;
 var max_log_age_ms = config.max_log_age_ms || 5 * 60 * 1000; // 5 minutes in milliseconds
 
 var log_file = unique_name(log_base);
+var mini_installer_log_file = path.join(mini_installer_log_path, "mini_installer_log");
 var log_time = new Date().getTime();
 var log_size = 0;
 
@@ -122,6 +127,14 @@ function rotate_time() {
   }
 }
 
+function rotateMiniInstallerLog() {
+  fs.rename(mini_installer_log_file, mini_installer_log_file + "." + new Date().valueOf() + ".finished", function (err) {
+    if (err) {
+      console.log("Error rotating " + mini_installer_log_file + err);
+    }
+  });
+}
+
 function rotate() {
   console.log(new Date().toISOString() + ": Rotating " + log_file + " after " + log_size + " bytes");
   fs.rename(log_file, log_file + ".finished", function (err) {
@@ -148,7 +161,22 @@ function getRequest(request, response, process_time, callback) {
     callback();
     return;
   }
+  if (request.url.lastIndexOf(mini_installer_url_prefix, 0) == 0) {
+    logMiniInstallerTelemetry(request);
+    return finish(200, request, response, 'OK', process_time, 0);
+  }
   return finish(404, request, response, "Not Found", process_time, 0);
+}
+
+function logMiniInstallerTelemetry(request) {
+  pathname = url.parse(request.url).pathname;
+  signals = pathname.replace(mini_installer_url_prefix, '').split('/');
+  csv_line = new Date().toISOString() + "," + signals + "\n";
+  fs.appendFileSync(mini_installer_log_file, csv_line);
+  mini_installer_log_size = fs.statSync(mini_installer_log_file)["size"];
+  if (mini_installer_log_size > max_mini_installer_log_size) {
+      rotateMiniInstallerLog();
+  } 
 }
 
 function postRequest(request, response, process_time, callback) {
